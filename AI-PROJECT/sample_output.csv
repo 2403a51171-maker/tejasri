@@ -1,0 +1,6 @@
+id	text	compound	neg	neu	pos	label
+1	I love Python! It's so powerful and fun. #programming	0.7096	0	0.548	0.452	positive
+2	This new update ruined everything. Very disappointed.	-0.5994	0.468	0.532	0	negative
+3	It's okay â€” not great, not awful.	0	0	1	0	neutral
+4	What a beautiful day! Feeling grateful.	0.6249	0	0.634	0.366	positive
+5	Worst experience ever. I hate it.	-0.8268	0.542	0.458	0	negative

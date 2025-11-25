@@ -1,0 +1,14 @@
+Tool(s) used: ChatGPT (GPT-4/assistant) for scaffold and code suggestions.
+
+
+Prompts given (examples):
+- "Write a Python script that accepts a CSV of tweets and computes sentiment scores using VADER. Output a CSV with scores and labels. Include a mode to scrape tweets using snscrape if available."
+- "Create a README with step-by-step run instructions and sample input/output."
+
+
+How AI helped: Generated the initial script structure, argparse usage, example README and suggestions for thresholds for labeling (compound >=0.05 positive, <=-0.05 negative, otherwise neutral). AI also suggested using snscrape to avoid Twitter API keys.
+
+
+Manual corrections I made:
+- Adjusted CSV read/write encoding to utf-8 and added better error messages.
+- Added usage examples and clarified required packages in requirements.txt.

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">viewport
+<head>
+  <meta charset="utf-8" />
+  <meta name="" content="width=device-width,initial-scale=1" />
+  <title>Tweet Sentiment Analyzer (Offline)</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#94a3b8;--pos:#16a34a;--neg:#ef4444;--neu:#64748b}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    body{background:linear-gradient(180deg,#071025 0%,#071227 100%);color:#e6eef8;padding:28px;box-sizing:border-box}
+    .container{max-width:1000px;margin:0 auto}
+    header{display:flex;align-items:center;gap:16px}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:6px 0 18px;color:var(--muted)}
+    .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+    textarea{width:100%;min-height:180px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;resize:vertical}
+    .controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+    button{background:#0ea5e9;border:none;padding:10px 14px;border-radius:8px;color:#042027;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .results{margin-top:18px;display:grid;grid-template-columns:1fr 320px;gap:14px}
+    .tweets-list{max-height:420px;overflow:auto;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03)}
+    .tweet-row{padding:10px;border-radius:8px;margin-bottom:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);display:flex;justify-content:space-between;gap:10px}
+    .score{min-width:90px;text-align:right;font-weight:700}
+    .score.pos{color:var(--pos)}
+    .score.neg{color:var(--neg)}
+    .score.neu{color:var(--neu)}
+    .summary{padding:12px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:700}
+    .pill.pos{background:rgba(34,197,94,0.12);color:var(--pos)}
+    .pill.neg{background:rgba(239,68,68,0.12);color:var(--neg)}
+    .pill.neu{background:rgba(100,116,139,0.12);color:var(--neu)}
+    .export{margin-top:8px}
+    footer{margin-top:22px;color:var(--muted);font-size:13px}
+    @media (max-width:900px){.results{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 21l1.5-5.5C5.2 13.7 7 12 9 12h6c2 0 3.8 1.7 4.5 3.5L21 21" stroke="#0ea5e9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M7 10a5 5 0 1 1 10 0v1H7v-1z" stroke="#0ea5e9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div>
+          <h1>Tweet Sentiment Analyzer — Offline</h1>
+          <p class="lead">Paste tweets (one per line) or a single tweet and press <strong>Analyze</strong>. Uses a built-in lexicon to classify positive, negative, or neutral.</p>
+        </div>
+      </div>
+    </header>
+
+    <section style="margin-top:14px" class="card">
+      <label for="tweets">Enter tweets <small style="color:var(--muted)"> (one per line)</small></label>
+      <textarea id="tweets" placeholder="I love this!\nThis is awful...\nMeh, it's okay."></textarea>
+      <div class="controls">
+        <button id="analyzeBtn">Analyze</button>
+        <button id="clearBtn" class="secondary">Clear</button>
+        <button id="demoBtn" class="secondary">Load Demo Tweets</button>
+        <button id="copyBtn" class="secondary">Copy Results CSV</button>
+        <button id="downloadBtn" class="secondary">Download CSV</button>
+      </div>
+
+      <div class="results">
+        <div>
+          <div class="tweets-list card" id="list"></div>
+        </div>
+        <aside class="card summary">
+          <h3>Summary</h3>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <div><div class="pill pos" id="posCount">Positive: 0</div></div>
+            <div><div class="pill neu" id="neuCount">Neutral: 0</div></div>
+            <div><div class="pill neg" id="negCount">Negative: 0</div></div>
+          </div>
+          <canvas id="chart" width="280" height="160" style="margin-top:12px"></canvas>
+          <div class="export">
+            <small style="color:var(--muted)">Export the analysis to CSV for further processing.</small>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <footer>Built-in lexicon (AFINN-like) and simple rules. This page runs completely in your browser — no server or API required.</footer>
+  </div>
+
+  <script>
+    // ----- Lightweight sentiment lexicon (partial AFINN-style). Add words to improve accuracy -----
+    const LEXICON = {
+      "love": 3, "loved":3, "loving":2,
+      "like":2, "liked":2,
+      "awesome":3, "amazing":3, "fantastic":3, "great":2, "good":2, "happy":2, "best":3,
+      "okay":0, "meh":0, "fine":0,
+      "hate":-3, "hated":-3, "terrible":-3, "awful":-3, "bad":-2, "worst":-3, "sad":-2,
+      "disappointed":-2, "disappointing":-2, "disappoint":-2,
+      "wow":1, "yay":2, "ugh":-1, "sucks":-2,
+      // emojis (simple mapping)
+      "😀":2, "😃":2, "😄":2, "😊":1, "😍":3, "❤️":3, "👍":2,
+      "😢":-2, "😞":-2, "😡":-3, "😠":-3, "👎":-2
+    };
+
+    // ---- Utility functions ----
+    function tokenize(s) {
+      // Lowercase, remove URLs, handles hashtags/mentions as tokens
+      s = s.replace(/https?:\/\/\S+/gi, '')
+           .replace(/[\u2000-\u2BFF]/g, ' ') // remove weird unicode ranges that sometimes break
+           .replace(/[{}()\[\]<>"'`]/g, ' ')
+           .replace(/[.,!?;:\/\n\r]/g, ' ')
+           .toLowerCase();
+      // Keep emojis intact (they survive), split on whitespace
+      return s.split(/\s+/).filter(Boolean);
+    }
+
+    function scoreTweet(text){
+      const tokens = tokenize(text);
+      if(tokens.length === 0) return {score:0,comparative:0,tokens:[]};
+      let score = 0;
+
+      // simple negation handling: if token before is a negation, invert score magnitude
+      const negations = new Set(['not','no','never','dont','doesnt','isnt','cant','couldnt','won\'t','won t','didnt','don\'t']);
+
+      for(let i=0;i<tokens.length;i++){
+        const t = tokens[i];
+        // strip leading/trailing non-alphanum except emojis
+        const clean = t.replace(/^\W+|\W+$/g,'');
+        if(!clean) continue;
+        let val = 0;
+        if(LEXICON.hasOwnProperty(clean)) val = LEXICON[clean];
+        else {
+          // check common punctuation-trimmed word
+          const al = clean.replace(/[^a-z0-9\u0080-\uFFFF_]/g,'');
+          if(LEXICON.hasOwnProperty(al)) val = LEXICON[al];
+        }
+        // if previous token is a negation, flip sign
+        if(i>0 && negations.has(tokens[i-1])) val = -val;
+        score += val;
+      }
+
+      // normalize to -5..+5 roughly
+      const maxPossible = 3 * tokens.length; // rough
+      const comparative = maxPossible === 0 ? 0 : +(score / Math.max(1, Math.sqrt(maxPossible))).toFixed(3);
+      return {score,comparative,tokens};
+    }
+
+    function classify(scoreObj){
+      if(scoreObj.score > 1) return 'positive';
+      if(scoreObj.score < -1) return 'negative';
+      return 'neutral';
+    }
+
+    // ----- UI wiring -----
+    const tweetsEl = document.getElementById('tweets');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const demoBtn = document.getElementById('demoBtn');
+    const listEl = document.getElementById('list');
+    const posCountEl = document.getElementById('posCount');
+    const negCountEl = document.getElementById('negCount');
+    const neuCountEl = document.getElementById('neuCount');
+    const chartCanvas = document.getElementById('chart');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    function renderChart(pos,neu,neg){
+      const ctx = chartCanvas.getContext('2d');
+      ctx.clearRect(0,0,chartCanvas.width,chartCanvas.height);
+      const total = pos+neu+neg || 1;
+      const w = chartCanvas.width; const h = chartCanvas.height;
+      const centerX = w/2; const centerY = h/2; const radius = Math.min(w,h)/3;
+      let start = -Math.PI/2;
+      const colors = {pos:'#16a34a',neu:'#64748b',neg:'#ef4444'};
+      [[pos,colors.pos],[neu,colors.neu],[neg,colors.neg]].forEach(([val,color])=>{
+        const angle = (val/total) * Math.PI*2;
+        ctx.beginPath(); ctx.moveTo(centerX,centerY);
+        ctx.arc(centerX,centerY,radius,start,start+angle);
+        ctx.closePath(); ctx.fillStyle = color; ctx.globalAlpha = 0.85; ctx.fill();
+        start += angle;
+      });
+      // center label
+      ctx.globalAlpha = 1; ctx.fillStyle='#e6eef8'; ctx.font = '14px Arial'; ctx.textAlign='center';
+      ctx.fillText(`P:${pos} N:${neg} O:${neu}`, centerX, centerY+6);
+    }
+
+    function analyzeAndRender(){
+      const raw = tweetsEl.value.trim();
+      if(!raw){ alert('Please paste one or more tweets (one per line) to analyze.'); return; }
+      const lines = raw.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+      listEl.innerHTML = '';
+      let pos=0,neg=0,neu=0;
+      const rows = [];
+      lines.forEach((t,idx)=>{
+        const sc = scoreTweet(t);
+        const cls = classify(sc);
+        if(cls==='positive') pos++;
+        if(cls==='negative') neg++;
+        if(cls==='neutral') neu++;
+        rows.push({tweet:t,score:sc.score,comparative:sc.comparative,label:cls});
+
+        const row = document.createElement('div'); row.className='tweet-row';
+        const left = document.createElement('div'); left.style.flex='1'; left.textContent = t;
+        const right = document.createElement('div'); right.className='score ' + (cls==='positive'?'pos':cls==='negative'?'neg':'neu');
+        right.innerHTML = `${sc.score} <small style="display:block;font-weight:400;color:var(--muted);font-size:12px">${cls}</small>`;
+        row.appendChild(left); row.appendChild(right);
+        listEl.appendChild(row);
+      });
+
+      posCountEl.textContent = `Positive: ${pos}`;
+      neuCountEl.textContent = `Neutral: ${neu}`;
+      negCountEl.textContent = `Negative: ${neg}`;
+      renderChart(pos,neu,neg);
+
+      // store results for export
+      window.__LAST_ANALYSIS = rows;
+    }
+
+    analyzeBtn.addEventListener('click', analyzeAndRender);
+    clearBtn.addEventListener('click', ()=>{tweetsEl.value=''; listEl.innerHTML=''; posCountEl.textContent='Positive: 0'; negCountEl.textContent='Negative: 0'; neuCountEl.textContent='Neutral: 0'; renderChart(0,1,0); window.__LAST_ANALYSIS = null;});
+    demoBtn.addEventListener('click', ()=>{
+      tweetsEl.value = `I love the new update! It's so fast and clean.\nThis product sucks, I'm so disappointed.\nMeh, not bad but could be better.\nAbsolutely amazing experience ❤️\nI hate the delays and bugs 😡\nPretty good overall, happy with it.`;
+    });
+
+    // CSV export
+    function toCSV(rows){
+      if(!rows || !rows.length) return '';
+      const hdr = ['tweet','score','comparative','label'];
+      const esc = v => '"'+String(v).replace(/"/g,'""')+'"';
+      const lines = [hdr.join(',')].concat(rows.map(r=>[esc(r.tweet),r.score,r.comparative,r.label].join(',')));
+      return lines.join('\n');
+    }
+
+    copyBtn.addEventListener('click', ()=>{
+      const csv = toCSV(window.__LAST_ANALYSIS || []);
+      if(!csv){ alert('No results to copy. Run an analysis first.'); return; }
+      navigator.clipboard.writeText(csv).then(()=>alert('CSV copied to clipboard.'))
+        .catch(()=>alert('Could not copy to clipboard.'));
+    });
+
+    downloadBtn.addEventListener('click', ()=>{
+      const csv = toCSV(window.__LAST_ANALYSIS || []);
+      if(!csv){ alert('No results to download. Run an analysis first.'); return; }
+      const blob = new Blob([csv],{type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'tweet_sentiment_analysis.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    // initial chart
+    renderChart(0,1,0);
+
+    // keyboard shortcut: Ctrl+Enter to analyze
+    tweetsEl.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ analyzeAndRender(); } });
+
+    // Accessibility: focus on textarea on load
+    window.onload = ()=>{ tweetsEl.focus(); };
+  </script>
+</body>
+</html>
